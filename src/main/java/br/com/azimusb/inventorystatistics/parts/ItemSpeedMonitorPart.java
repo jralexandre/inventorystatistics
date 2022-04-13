@@ -5,34 +5,29 @@ import appeng.api.networking.security.IActionSource;
 import appeng.api.networking.ticking.IGridTickable;
 import appeng.api.networking.ticking.TickRateModulation;
 import appeng.api.networking.ticking.TickingRequest;
-import appeng.api.parts.IPartModel;
 import appeng.api.storage.IStorageChannel;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IAEStack;
 import appeng.api.storage.data.IItemList;
 import appeng.api.util.AEColor;
 import appeng.client.render.TesrRenderHelper;
-import appeng.core.AppEng;
-import appeng.items.parts.PartModels;
 import appeng.me.GridAccessException;
 import appeng.me.helpers.AENetworkProxy;
-import appeng.parts.PartModel;
-import appeng.parts.reporting.AbstractMonitorPart;
 import appeng.parts.reporting.PanelPart;
 import appeng.parts.reporting.StorageMonitorPart;
-import br.com.azimusb.inventorystatistics.InventoryStatistics;
-import com.ibm.icu.impl.Pair;
 import com.mojang.blaze3d.matrix.MatrixStack;
+import com.mojang.datafixers.util.Pair;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.renderer.IRenderTypeBuffer;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.network.PacketBuffer;
 import net.minecraft.util.Direction;
 import net.minecraft.util.Hand;
-import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.vector.Vector3d;
+import net.minecraft.util.text.StringTextComponent;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 
@@ -50,8 +45,44 @@ public class ItemSpeedMonitorPart extends StorageMonitorPart implements IGridTic
 
     private final AENetworkProxy gridProxy = this.getProxy();
 
-    private String lastHumanReadableText = "0.0/s";
+    enum SpeedUnit {
+        perTick(1, "t", "ticks"),
+        perSecond(20, "s", "seconds"),
+        perMinute(1200, "m", "minutes");
+
+        private final int ticks;
+        private final String unit;
+        private final String unitFullName;
+
+        private static final SpeedUnit[] vals = values();
+
+        SpeedUnit(int ticks, String unit, String unitFullName) {
+            this.ticks = ticks;
+            this.unit = unit;
+            this.unitFullName = unitFullName;
+        }
+
+        public int getTicks() {
+            return ticks;
+        }
+
+        public String getUnit() {
+            return unit;
+        }
+
+        public String getUnitFullName() {
+            return unitFullName;
+        }
+
+        public SpeedUnit getNext() {
+            return vals[(this.ordinal()+1) % vals.length];
+        }
+    }
+
+    private SpeedUnit unit = SpeedUnit.perSecond;
+    private String lastHumanReadableText = "0.0/" + unit.getUnit();
     private double lastSpeed = 0.0;
+
 
     private final Queue<Pair<Long, Long>> buffer = new LinkedList<>();
 
@@ -63,6 +94,7 @@ public class ItemSpeedMonitorPart extends StorageMonitorPart implements IGridTic
 
     @Override
     public boolean onPartActivate(PlayerEntity player, Hand hand, Vector3d pos) {
+        Item prevItem = getDisplayed() != null ? getDisplayed().getItem() : null;
         boolean ret = super.onPartActivate(player, hand, pos);
 
         if (isRemote()) {
@@ -70,9 +102,19 @@ public class ItemSpeedMonitorPart extends StorageMonitorPart implements IGridTic
         }
 
         if (!player.getHeldItem(hand).isEmpty()) {
-            this.startTime = -1;
-            this.startCount = -1;
-            buffer.clear();
+            if (player.getHeldItem(hand).getItem().equals(prevItem)) {
+                unit = unit.getNext();
+                player.sendMessage(new StringTextComponent("Changed unit to " + unit.getUnitFullName() + "."), player.getUniqueID());
+                lastHumanReadableText = getRenderedItemSpeed(lastSpeed);
+                this.getHost().markForUpdate();
+            } else {
+                this.startTime = -1;
+                this.startCount = -1;
+                this.lastSpeed = 0.0;
+                this.lastHumanReadableText = "0.0/" + unit.getUnit();
+                buffer.clear();
+                this.getHost().markForUpdate();
+            }
         }
 
         return ret;
@@ -108,8 +150,8 @@ public class ItemSpeedMonitorPart extends StorageMonitorPart implements IGridTic
         buffer.add(Pair.of(stackSize, gameTime));
         if (buffer.size() > MAX_COUNT) {
             Pair<Long, Long> p = buffer.remove();
-            startCount = p.first;
-            startTime = p.second;
+            startCount = p.getFirst();
+            startTime = p.getSecond();
         }
 
         if (startCount == -1) {
@@ -180,7 +222,7 @@ public class ItemSpeedMonitorPart extends StorageMonitorPart implements IGridTic
     }
 
     private String getRenderedItemSpeed(double itemSpeed) {
-        return ((itemSpeed > 0.0) ? "+" : "") + String.format("%.1f", 20 * itemSpeed) + "/s";
+        return ((itemSpeed > 0.0) ? "+" : "") + String.format("%.1f", unit.getTicks() * itemSpeed) + "/" + unit.getUnit();
     }
 
     private double getItemSpeed() {
@@ -224,7 +266,7 @@ public class ItemSpeedMonitorPart extends StorageMonitorPart implements IGridTic
             startTime = currentTime = -1;
             buffer.clear();
 
-            this.lastHumanReadableText = "0.0/s";
+            this.lastHumanReadableText = "0.0/" + unit.getUnit();
             this.lastSpeed = 0.0;
             this.getHost().markForUpdate();
 
