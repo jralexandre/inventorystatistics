@@ -1,0 +1,42 @@
+{
+  "textures": {
+    "lightsBright": "inventorystatistics:part/item_speed_monitor_bright",
+    "lightsMedium": "inventorystatistics:part/item_speed_monitor_medium",
+    "lightsDark": "inventorystatistics:part/item_speed_monitor_dark"
+  },
+  "elements": [
+    {
+      "from": [2, 2, 0],
+      "to": [14, 14, 2],
+      "faces": {
+        "north": {
+          "texture": "#lightsBright",
+          "tintindex": 3,
+          "unlit": true
+        }
+      }
+    },
+    {
+      "from": [2, 2, 0],
+      "to": [14, 14, 2],
+      "faces": {
+        "north": {
+          "texture": "#lightsMedium",
+          "tintindex": 2,
+          "unlit": true
+        }
+      }
+    },
+    {
+      "from": [2, 2, 0],
+      "to": [14, 14, 2],
+      "faces": {
+        "north": {
+          "texture": "#lightsDark",
+          "tintindex": 1,
+          "unlit": true
+        }
+      }
+    }
+  ]
+}
