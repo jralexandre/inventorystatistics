@@ -1,0 +1,9 @@
+{
+  "parent": "appliedenergistics2:item/display_base",
+  "textures": {
+    "front": "inventorystatistics:part/item_speed_monitor",
+    "front_bright": "inventorystatistics:part/item_speed_monitor_bright",
+    "front_medium": "inventorystatistics:part/item_speed_monitor_medium",
+    "front_dark": "inventorystatistics:part/item_speed_monitor_dark"
+  }
+}
