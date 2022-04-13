@@ -1,14 +1,17 @@
 package br.com.azimusb.inventorystatistics.setup;
 
 import br.com.azimusb.inventorystatistics.InventoryStatistics;
+import br.com.azimusb.inventorystatistics.tileentity.ItemSpeedAltarRenderer;
 import net.minecraft.block.Block;
-import net.minecraft.inventory.container.ContainerType;
+import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.RenderTypeLookup;
+import net.minecraft.entity.EntityType;
 import net.minecraft.item.Item;
-import net.minecraft.item.crafting.IRecipeSerializer;
 import net.minecraft.tileentity.TileEntityType;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.client.registry.ClientRegistry;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
@@ -19,10 +22,10 @@ import net.minecraftforge.registries.IForgeRegistryEntry;
 
 public class Registration {
     public static final DeferredRegister<Block> BLOCKS = create(ForgeRegistries.BLOCKS);
-    public static final DeferredRegister<ContainerType<?>> CONTAINERS = create(ForgeRegistries.CONTAINERS);
     public static final DeferredRegister<Item> ITEMS = create(ForgeRegistries.ITEMS);
-    public static final DeferredRegister<IRecipeSerializer<?>> RECIPE_SERIALIZERS = create(ForgeRegistries.RECIPE_SERIALIZERS);
+    public static final DeferredRegister<EntityType<?>> ENTITIES = create(ForgeRegistries.ENTITIES);
     public static final DeferredRegister<TileEntityType<?>> TILE_ENTITIES = create(ForgeRegistries.TILE_ENTITIES);
+
 
     public static void register() {
         IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
@@ -30,17 +33,14 @@ public class Registration {
         modEventBus.register(ModItems.class);
 
         BLOCKS.register(modEventBus);
-        CONTAINERS.register(modEventBus);
+        ENTITIES.register(modEventBus);
         ITEMS.register(modEventBus);
-        RECIPE_SERIALIZERS.register(modEventBus);
         TILE_ENTITIES.register(modEventBus);
 
         ModBlocks.register();
         ModItems.register();
 
-        /*ModContainerTypes.register();
-
-        ModRecipes.register();*/
+        ModEntities.register();
         ModTileEntityTypes.register();
     }
 
@@ -55,6 +55,8 @@ public class Registration {
         @SubscribeEvent
         public static void onClientSetup(FMLClientSetupEvent event) {
             //ModContainerTypes.registerScreens(event);
+            RenderTypeLookup.setRenderLayer(ModBlocks.ITEM_SPEED_ALTAR_BLOCK, RenderType.getCutout());
+            ClientRegistry.bindTileEntityRenderer(ModTileEntityTypes.ITEM_SPEED_ALTAR.get(), ItemSpeedAltarRenderer::new);
         }
     }
 }

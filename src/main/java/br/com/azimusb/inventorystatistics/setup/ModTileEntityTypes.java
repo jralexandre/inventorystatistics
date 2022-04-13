@@ -1,5 +1,6 @@
 package br.com.azimusb.inventorystatistics.setup;
 
+import br.com.azimusb.inventorystatistics.tileentity.ItemSpeedAltarTileEntity;
 import net.minecraft.block.Block;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.tileentity.TileEntityType;
@@ -9,12 +10,15 @@ import java.util.function.Supplier;
 
 public class ModTileEntityTypes {
 
-    static void register() {}
+    public static RegistryObject<TileEntityType<ItemSpeedAltarTileEntity>> ITEM_SPEED_ALTAR = register("item_speed_altar", ItemSpeedAltarTileEntity::new, ModBlocks.ITEM_SPEED_ALTAR_BLOCK);
 
-    private static <T extends TileEntity> RegistryObject<TileEntityType<T>> register(String name, Supplier<T> factory, RegistryObject<? extends Block> block) {
+    static void register() {
+    }
+
+    private static <T extends TileEntity> RegistryObject<TileEntityType<T>> register(String name, Supplier<T> factory, Block block) {
         return Registration.TILE_ENTITIES.register(name, () -> {
             //noinspection ConstantConditions - null in build
-            return TileEntityType.Builder.create(factory, block.get()).build(null);
+            return TileEntityType.Builder.create(factory, block).build(null);
         });
     }
 }

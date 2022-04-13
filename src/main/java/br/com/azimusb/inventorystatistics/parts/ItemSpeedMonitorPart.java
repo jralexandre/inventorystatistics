@@ -15,8 +15,8 @@ import appeng.me.GridAccessException;
 import appeng.me.helpers.AENetworkProxy;
 import appeng.parts.reporting.PanelPart;
 import appeng.parts.reporting.StorageMonitorPart;
+import br.com.azimusb.inventorystatistics.helpers.SpeedHelper;
 import com.mojang.blaze3d.matrix.MatrixStack;
-import com.mojang.datafixers.util.Pair;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.renderer.IRenderTypeBuffer;
@@ -33,58 +33,14 @@ import net.minecraftforge.api.distmarker.OnlyIn;
 
 import javax.annotation.Nonnull;
 import java.io.IOException;
-import java.util.LinkedList;
-import java.util.Queue;
 
 public class ItemSpeedMonitorPart extends StorageMonitorPart implements IGridTickable {
-    public static final int MAX_COUNT = 3;
-    private long startTime = -1;
-    private long startCount = -1;
-    private long currentTime = -1;
-    private long currentCount = -1;
-
     private final AENetworkProxy gridProxy = this.getProxy();
 
-    enum SpeedUnit {
-        perTick(1, "t", "ticks"),
-        perSecond(20, "s", "seconds"),
-        perMinute(1200, "m", "minutes");
+    private final SpeedHelper speedHelper = new SpeedHelper();
 
-        private final int ticks;
-        private final String unit;
-        private final String unitFullName;
-
-        private static final SpeedUnit[] vals = values();
-
-        SpeedUnit(int ticks, String unit, String unitFullName) {
-            this.ticks = ticks;
-            this.unit = unit;
-            this.unitFullName = unitFullName;
-        }
-
-        public int getTicks() {
-            return ticks;
-        }
-
-        public String getUnit() {
-            return unit;
-        }
-
-        public String getUnitFullName() {
-            return unitFullName;
-        }
-
-        public SpeedUnit getNext() {
-            return vals[(this.ordinal()+1) % vals.length];
-        }
-    }
-
-    private SpeedUnit unit = SpeedUnit.perSecond;
-    private String lastHumanReadableText = "0.0/" + unit.getUnit();
+    private String lastHumanReadableText = "0.0/" + speedHelper.getUnit();
     private double lastSpeed = 0.0;
-
-
-    private final Queue<Pair<Long, Long>> buffer = new LinkedList<>();
 
     private boolean skippedFirstUpdate = false;
 
@@ -103,16 +59,16 @@ public class ItemSpeedMonitorPart extends StorageMonitorPart implements IGridTic
 
         if (!player.getHeldItem(hand).isEmpty()) {
             if (player.getHeldItem(hand).getItem().equals(prevItem)) {
-                unit = unit.getNext();
-                player.sendMessage(new StringTextComponent("Changed unit to " + unit.getUnitFullName() + "."), player.getUniqueID());
+                speedHelper.setNextUnit();
+                player.sendMessage(new StringTextComponent("Changed unit to " + speedHelper.getUnitFullName() + "."), player.getUniqueID());
                 lastHumanReadableText = getRenderedItemSpeed(lastSpeed);
                 this.getHost().markForUpdate();
             } else {
-                this.startTime = -1;
-                this.startCount = -1;
+                this.speedHelper.reset();
+
                 this.lastSpeed = 0.0;
-                this.lastHumanReadableText = "0.0/" + unit.getUnit();
-                buffer.clear();
+                this.lastHumanReadableText = "0.0/" + speedHelper.getUnit();
+                //buffer.clear();
                 this.getHost().markForUpdate();
             }
         }
@@ -147,16 +103,12 @@ public class ItemSpeedMonitorPart extends StorageMonitorPart implements IGridTic
         long stackSize = fullStack.getStackSize();
         long gameTime = getLocation().getWorld().getGameTime();
 
-        buffer.add(Pair.of(stackSize, gameTime));
-        if (buffer.size() > MAX_COUNT) {
-            Pair<Long, Long> p = buffer.remove();
-            startCount = p.getFirst();
-            startTime = p.getSecond();
-        }
+        speedHelper.add(stackSize, gameTime);
 
-        if (startCount == -1) {
-            startCount = stackSize - diffStack.getStackSize(); // Use previous value
-            startTime = gameTime;
+        if (speedHelper.getStartTime() == -1) {
+            speedHelper.setStart(
+                    stackSize - diffStack.getStackSize(), // Use previous value
+                    gameTime);
         }
 
         try {
@@ -222,58 +174,47 @@ public class ItemSpeedMonitorPart extends StorageMonitorPart implements IGridTic
     }
 
     private String getRenderedItemSpeed(double itemSpeed) {
-        return ((itemSpeed > 0.0) ? "+" : "") + String.format("%.1f", unit.getTicks() * itemSpeed) + "/" + unit.getUnit();
+        return speedHelper.getRenderedItemSpeed(itemSpeed);
     }
 
     private double getItemSpeed() {
-        double itemSpeed;
-
-        if ((this.currentTime - this.startTime) == 0 || this.startTime == -1) {
-            itemSpeed = 0.0;
-        } else {
-            itemSpeed = (double)(this.currentCount - this.startCount) / (this.currentTime - this.startTime);
-        }
-        return itemSpeed;
+        return speedHelper.getItemSpeed();
     }
 
     @Nonnull
     @Override
     public TickingRequest getTickingRequest(@Nonnull final IGridNode node) {
-        return new TickingRequest(5, 40, startTime == -1,
+        return new TickingRequest(5, 40, speedHelper.getStartTime() == -1,
                 true);
     }
 
     @Nonnull
     @Override
     public TickRateModulation tickingRequest(@Nonnull final IGridNode node, final int ticksSinceLastCall) {
-        if (!this.gridProxy.isActive() || this.getDisplayed() == null || startTime == -1) {
+        if (!this.gridProxy.isActive() || this.getDisplayed() == null || speedHelper.getStartTime() == -1) {
             return TickRateModulation.SLEEP;
         }
 
-        currentCount = this.getDisplayed().getStackSize();
-        currentTime = getLocation().getWorld().getGameTime();
+        speedHelper.setCurrent(this.getDisplayed().getStackSize(), getLocation().getWorld().getGameTime());
 
-        if (startTime == -1) {
-            startCount = currentCount;
-            startTime = currentTime;
+        if (speedHelper.getStartTime() == -1) {
+            speedHelper.setStartToCurrent();
             return TickRateModulation.SAME;
         }
 
         final double speed = getItemSpeed();
 
-        if (currentTime - startTime > 200) {
-            startCount = currentCount = -1;
-            startTime = currentTime = -1;
-            buffer.clear();
+        if (speedHelper.passedTicks() > 200) {
+            speedHelper.reset();
 
-            this.lastHumanReadableText = "0.0/" + unit.getUnit();
+            this.lastHumanReadableText = "0.0/" + speedHelper.getUnit();
             this.lastSpeed = 0.0;
             this.getHost().markForUpdate();
 
             return TickRateModulation.SLEEP;
         }
 
-        if (currentTime - startTime >= 5) {
+        if (speedHelper.passedTicks() >= 5) {
             this.lastHumanReadableText = getRenderedItemSpeed(speed);
             this.lastSpeed = speed;
             this.getHost().markForUpdate();
